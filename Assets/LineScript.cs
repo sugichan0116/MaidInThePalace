@@ -259,7 +259,8 @@ public sealed class Node<TValue>
 }
 
 public class Calculation {
-	private static int DEFAULT_PRIORITY = 0;
+	private static int DEFAULT_PRIORITY = 8;
+	private static string BRACKET = "()";
 	private static Dictionary<string, int> OPERATORS = new Dictionary<string, int>()
 		{
 			{"*", 7}, {"/", 7}, {"%", 7}, 
@@ -350,89 +351,105 @@ public class Calculation {
 		if(canBuild(node)) {
 			string left = "", right = "";
 			string splitOperator = "";
-			string parentheseContent = "";
-			if(node.Value.Contains("(")) {
-				Debug.Log("* try to start parenthese replacement in " + node.Value);
-				int openIndex = node.Value.IndexOf("(");
-				int nest = 1, i = openIndex + 1;
-				while(nest > 0) {
-					if(node.Value[i] == '(') nest++;
-					else if(node.Value[i] == ')') nest--;
-					i++;
-				}
-				int closeIndex = i - 1;
-				parentheseContent = node.Value.Substring(openIndex + 1, closeIndex - openIndex - 1);
-				node.Value = node.Value.Remove(openIndex + 1, closeIndex - openIndex - 1);
-				Debug.Log("* parenthese:" + parentheseContent + " / " + node.Value);
-			}
+			string origin = node.Value;
 
-			int minPriority = Calculation.DEFAULT_PRIORITY,
-				minIndex = node.Value.Length;
+			int minIndex = origin.Length, nest = 0;
+			int priority = Calculation.DEFAULT_PRIORITY;
+			string process = origin;
+			while(process.Length > 0) {
 
-			foreach(string key in Calculation.OPERATORS.Keys) {
-				int index = node.Value.IndexOf(key);
-				int priority = Calculation.OPERATORS[key];
-				if(index >= 0) {
-					if(
-						(minPriority == Calculation.DEFAULT_PRIORITY) || 
-						(priority != Calculation.DEFAULT_PRIORITY && priority < minPriority) ||
-					 	(priority == minPriority && index < minIndex)) {
-							if(index == minIndex && splitOperator.Length > key.Length) {
-								Debug.Log("@building nodes : operator priority exceeding, " + splitOperator + "/" + key);
-							} else {
-								minIndex = index;
-								minPriority = priority;
-								splitOperator = key;
+				if(process[0] == Calculation.BRACKET[1]) nest--;
+				if(nest == 0) {
+					string longerKey = "";
+					int longerPriority = Calculation.DEFAULT_PRIORITY;
+					foreach(string key in Calculation.OPERATORS.Keys) {
+						if(process.StartsWith(key)) {
+							//Debug.Log("[@] :" + longerKey + "[" + (origin.Length - process.Length) + "]" + key);
+							if(longerKey.Length < key.Length) {
+								longerKey = key;
+								longerPriority = Calculation.OPERATORS[key];
 							}
+						}
+					}
+					if(priority > longerPriority) {
+						priority = longerPriority;
+						splitOperator = longerKey;
+						minIndex = origin.Length - process.Length;
+						Debug.Log("[search] : " + minIndex + "; " + splitOperator + "; " + priority + "; " + process);
+					}
+					if(longerPriority != Calculation.DEFAULT_PRIORITY) {
+						//Debug.Log("[key] : " + longerKey);
+						process = process.Remove(0, longerKey.Length - 1);
 					}
 				}
-			}
-			Debug.Log("[*] " + node.Value);
-			try {
-				string buff = node.Value;
+				if(process[0] == Calculation.BRACKET[0]) nest++;
 				
-				left = buff.Substring(0, minIndex - 1);
-				Debug.Log(left);
-				right = buff.Substring(splitOperator.Length + minIndex, buff.Length - minIndex - splitOperator.Length);
-				Debug.Log(right);
+				if(process.Length != 0) process = process.Remove(0, 1);
+			}
+
+			Debug.Log("[*] " + origin);
+			try {
+				left = origin.Substring(0, minIndex - 1);
+				left = left.Trim();
+				right = origin.Substring(splitOperator.Length + minIndex, origin.Length - minIndex - splitOperator.Length);
+				right = right.Trim();
+				Debug.Log("left & right :" + left + "/" + right);
 
 				string assignOperator = "=";
 				if(operatorPriority(splitOperator) == operatorPriority(assignOperator) &&
 					splitOperator.Length > assignOperator.Length) {
 					string newOperator = splitOperator.Replace(assignOperator, "");
 					splitOperator = assignOperator;
-					right = left + " " + newOperator + " (" + right + ")";
+					right = left + " " + newOperator + " (" + right + ")"; //頑張って直す
 					Debug.Log("*extended Assignment Operator : " + left + "/" + splitOperator + "/" + right);
 				}
 
-				if(left.Contains("()")) {
-					if(left.Trim() == "()") {
-						left = parentheseContent;
-					} else {
-						left = left.Replace("()", "(" + parentheseContent + ")");
-					}
-				}
-
-				if(right.Contains("()")) {
-					if(right.Trim() == "()") {
-						right = parentheseContent;
-					} else {
-						right = right.Replace("()", "(" + parentheseContent + ")");
-					}
-				}
+				uncoverBracket(ref left);
+				uncoverBracket(ref right);
+				
+				left = left.Trim();
+				right = right.Trim();
+				Debug.Log("left & right :" + left + "/" + right);
 			} catch {
-				Debug.Log("ERROR : invalid data, can not split into node. => " + node.Value);
+				Debug.Log("ERROR : invalid data, can not split into node. => " + origin);
 				node.Value = "NaN";
 				return;
 			}
 			node.Value = splitOperator;
-			node.Left = new Node<string>(left.Trim());
-			node.Right = new Node<string>(right.Trim());
+			node.Left = new Node<string>(left);
+			node.Right = new Node<string>(right);
 		}
 	}
 
+	private static void uncoverBracket(ref string s) {
+		s = s.Trim();
+		if(s.Contains(Calculation.BRACKET[0].ToString()) == false) {
+			return;
+		}
+
+		int i = 0, nest = 0, outChar = 0;
+		while(s.Length > i) {
+			if(s[i] == Calculation.BRACKET[1]) nest--;
+			if(nest == 0) {
+				outChar++;
+			}
+			if(s[i] == Calculation.BRACKET[0]) nest++;
+			i++;
+		}
+
+		if(outChar == 2) {
+			s = s.Remove(0, 1);
+			s = s.Remove(s.Length - 1, 1);
+			uncoverBracket(ref s);
+		}
+	}
+
+	private static int countChar(string s, string c) {
+		return (s.Length - s.Replace(c, "").Length) / c.Length;
+	}
+
 	private static void analyse(Node<string> node) {
-		build(node); //参照的にイケてるのか？
+		build(node); //参照的にイケてるのか？　いけてるかも？
 
 		if(node.Left != null) analyse(node.Left);
 		if(node.Right != null) analyse(node.Right);
@@ -542,7 +559,7 @@ public class Comparison {
 
 	public static bool judge(Dictionary<string, string> variable, string text) {
 		string result = Calculation.execute(variable, text);
-		Debug.Log("Coparison executed, result in " + result + "/" + (result == "true"));
+		Debug.Log("Coparison executed, result in " + result);
 		return string.Compare(result, "true", true) == 0;
 	}
 
