@@ -53,13 +53,6 @@ public class TextController : MonoBehaviour {
 			LineScript line = linescripts[currentLine];
 			isReadText = isReadText || line.isText();
 			
-			uiText.text = line.text; //debug
-			//Debug.Log (line.indent);
-
-			//indent down & up
-			// if(line.indent < indentHeads.Count) {
-			// 	indentHeads.RemoveAt(indentHeads.Count - 1);
-			// }
 			while(line.indent < indentHeads.Count) {
 				indentHeads.RemoveAt(indentHeads.Count - 1);
 			}
@@ -100,6 +93,13 @@ public class TextController : MonoBehaviour {
 
 				}
 			}
+			
+			if(line is FormatText) {
+				FormatText f = line as FormatText;
+				f.execute(variable);
+			}
+
+			uiText.text = line.text; //debug
 
 			//speaker update
 			string name = "";

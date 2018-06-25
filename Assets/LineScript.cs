@@ -10,13 +10,13 @@ public class LineScriptFactory {
 		int indentLevel = 0;
 
 		mainText = rowText;
-		while(mainText.StartsWith("\t")) {
+		while(mainText.StartsWith("  ") || mainText.StartsWith("\t")) {
 			indentLevel++;
-			mainText = mainText.Remove (0, 1);
-		}
-		while(mainText.StartsWith("  ")) {
-			indentLevel++;
-			mainText = mainText.Remove (0, 2);
+			if(mainText.StartsWith("  ")) {
+				mainText = mainText.Remove (0, 2);
+			} else {
+				mainText = mainText.Remove (0, 1);
+			}
 		}
 		mainText.Trim ();
 
@@ -38,6 +38,9 @@ public class LineScriptFactory {
 		} else if (Selection.isMatch(mainText)) {
 			Debug.Log("sel " + mainText);
 			return new Selection (rowText, "", indentLevel, mainText);
+		} else if (FormatText.isMatch(mainText)) {
+			Debug.Log("sel " + mainText);
+			return new FormatText (rowText, mainText, indentLevel, "");
 		}
 
 		return new LineScript (rowText, mainText, indentLevel, "");
@@ -85,6 +88,45 @@ public class LineScript {
 
 	public bool isText() {
 		return isOrder == false;
+	}
+}
+
+public class FormatText : LineScript {
+	public static string MARK = "{}";
+	
+	public FormatText(string text, string mainText, int indent, string option) 
+		: base(text, mainText, indent, option){
+	}
+
+	public void execute(Dictionary<string, string> variable) {
+		mainText = "";
+
+		string innerText = "";
+		int i = 0, nest = 0;
+		while(rowText.Length > i) {
+			if(rowText[i] == FormatText.MARK[1]) {
+				string result = Calculation.execute(variable, innerText);
+				Debug.Log("{$} : " + innerText + "{/}" + result);
+				mainText += result;
+				innerText = "";
+				nest--;
+			}
+			if(nest == 0) mainText += rowText[i];
+			else {
+				innerText += rowText[i];
+			}
+			if(rowText[i] == FormatText.MARK[0]) nest++;
+			i++;
+		}
+
+		mainText = mainText.Replace(FormatText.MARK[0].ToString(), "");
+		mainText = mainText.Replace(FormatText.MARK[1].ToString(), "");
+		mainText = mainText.Trim();
+	}
+
+	public static bool isMatch(string text) {
+		return text.Contains (FormatText.MARK[0].ToString()) && 
+			text.Contains (FormatText.MARK[1].ToString());
 	}
 }
 
@@ -545,10 +587,18 @@ public class Calculation {
 	}
 
 	public static string execute(Dictionary<string, string> variable, string text) {
+		uncoverBracket(ref text);
 		var root = new Node<string>(text);
 
 		analyse(root);
 		traverse(variable, root);
+		
+		string key = root.Value; //ここを関数化
+		if(typeOf(key) == "variable") {
+			key = key.Replace(Assignment.VARIABLE, "");
+			if(variable.ContainsKey(key)) root.Value = variable[key];
+			else root.Value = "undefined";
+		}
 
 		return root.Value;
 	}
